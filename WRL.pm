@@ -1,5 +1,7 @@
 package WRL;
 
+use Sys::Syslog;
+
 $debug = 0;
 
 sub set_debug
@@ -45,6 +47,7 @@ sub new
     my $this = {'id' => $id, 
 		'record_list' => [$record],
 		'window'      => $window,
+		'last_update' => $record->{'ts'},
 		'rate'        => 0,
 		'blocked'     => 0,
     };
@@ -59,6 +62,7 @@ sub add_record
     my ($this, $record) = @_;
 
     push @{$this->{'record_list'}}, $record;
+    $this->{'last_update'} = $record->{'ts'};
 }
 
 sub calc_rate
@@ -80,6 +84,7 @@ sub add_record
     my ($this, $record) = @_;
 
     push @{$this->{'record_list'}}, $record;
+    $this->{'last_update'} = $record->{'ts'};
     
     ## querying a blocked query gets you blocked
     if ($this->{'blocked'}) {
@@ -94,17 +99,16 @@ sub block
     my ($this) = @_;
     my ($query, $hex_query, $ipt_cmd);
 
-    next if ($this->{'blocked'});
+    return if ($this->{'blocked'});
 
-    $hex_query = unpack('H*', $this->{'id'});
-    $ipt_cmd = sprintf('iptables -A INPUT -p udp --dport 53 -m string --hex-string "|%s|" --algo bm -j DROP', $hex_query);
-
+    #$hex_query = unpack('H*', $this->{'id'});
+    #$ipt_cmd = sprintf('iptables -A INPUT -p udp --dport 53 -m string --hex-string "|%s|" --algo bm -j DROP', $hex_query);
 
     if ($WRL::debug) {
 	print "$ipt_cmd\n";
     } else {
 	#system($ipt_cmd);
-	#syslog('warning', "blocked query %s (%s)", $this->{'id'}, $ipt_cmd);
+	Sys::Syslog::syslog('warning', "blocked query %s (%s)", $this->{'id'}, $ipt_cmd);
     }
 
     for $query (@{$this->{'record_list'}}) {
@@ -129,8 +133,8 @@ sub block
     if ($WRL::debug) {
 	print "$ipt_cmd\n";
     } else {
-	#system($ipt_cmd);
-	#syslog('warning', "blocked client %s (%s)", $this->{'client_ip'}, $ipt_cmd);
+	system($ipt_cmd);
+	Sys::Syslog::syslog('warning', "blocked client %s (%s)", $this->{'id'}, $ipt_cmd);
     }
 
     $this->{'blocked'} = 1;

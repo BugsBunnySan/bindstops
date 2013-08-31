@@ -20,8 +20,11 @@ $threshold_client_ps     =  5; # if the same client per second
 $threshold_client_window = 10; # over this period of time => block
 
 $log_check_sleepy_time =  5; # if no new log entries, sleep for this many seconds
-$print_count_interval   = 30; # every this many seconds update the html count page
+$print_count_interval  = 30; # every this many seconds update the html count page
 
+$query_ttl  = 3600;
+$client_ttl = 3600;
+$cleanup_interval = 1800;
 
 ## files config
 $queries_log = "/var/log/named/queries.log";
@@ -47,6 +50,7 @@ $day_queries = $queries_per_day{$today};
 
 print_count();
 $print_count_ts = $now;
+$cleanup_ts = $now;
 
 openlog("bindstats.pl", "nofatal", "local0");
 open($LOG, '<', $queries_log,) or do_quit(-1, "log $!\n", $now, $LOG);
@@ -71,6 +75,7 @@ while (1) {
     } else {
 	++$day_queries;
     }
+    $queries_per_day{$today} = $day_queries;
 
     ## take apart the log line
     ($datetime, $date, $query_str, $client_ip) = BS::parse_log_line($log_line);
@@ -105,6 +110,11 @@ while (1) {
 	$client_wrl->block();
     }	
     
+    if (($now - $cleanup_ts) >= $cleanup_interval) {
+	cleanup(\$query_records, $query_ttl, \$client_records, $client_ttl);
+	$cleanup_ts = $now;
+    }
+
     if (($now - $print_count_ts) >= $print_count_interval) {
 	print_count();
 	$print_count_ts = $now;
@@ -112,6 +122,30 @@ while (1) {
 }
 
 do_quit(0, "normal exit", $now, $LOG);
+
+sub cleanup
+{
+    my ($query_records, $query_ttl, $client_records, $client_ttl) = @_;
+    my (@delete_queries, @delete_clients);
+    my ($now, $today) = BS::now();
+
+    my $query_cutoff  = $now - $query_ttl;
+    my $client_cutoff = $now - $client_ttl;
+
+    while (($query_str, $query_wrl) = each %$$query_records) {
+	if ($query_wrl->{'last_update'} <= $query_cutoff) {
+	    delete $$$query_records{$query_str};
+	    Sys::Syslog::syslog('info', "forgot about query %s", $query_str);
+	}
+    }
+
+    while (($client_ip, $client_wrl) = each %$$client_records) {
+	if ($client_wrl->{'last_update'} <= $client_cutoff) {
+	    delete $$$client_records{$client_ip};
+	    Sys::Syslog::syslog('info', "forgot about client %s", $client_ip);
+	}
+    }
+}
 
 sub init_records
 {
