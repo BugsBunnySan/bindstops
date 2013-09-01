@@ -2,6 +2,7 @@ package BS;
 
 use Date::Parse qw(str2time);
 use Time::HiRes qw(time);
+use Sys::Syslog;
 
 # 21-Aug-2013 03:40:20.579 queries: info: client 184.72.178.83#766: query: bfhmm.com IN TXT +E (109.73.52.34)
 $query_regex = '^(\d\d-...-\d\d\d\d) (\d\d:\d\d:\d\d.\d\d\d) .* client ([0-9\.]+)#\d+: query: ([^\(]+) \(';
@@ -24,15 +25,21 @@ sub now
 sub parse_log_line
 {
     my ($log_line) = @_;
+    my ($valid, $date, $time, $client_ip, $query_str);
 
     chomp($log_line);
 
-    $log_line =~ m/$query_regex/;
-    my ($date, $time, $client_ip, $query_str) = ($1, $2, $3, $4, $5);
-    $dt   = str2time("$date $time");
-    $date = str2time($date);
+    if ($log_line =~ m/$query_regex/) {
+	$valid = 1;
+	($date, $time, $client_ip, $query_str) = ($1, $2, $3, $4, $5);
+	$dt   = str2time("$date $time");
+	$date = str2time($date);
+    } else {
+	$valid = 0;
+	syslog('info', "Couldn't parse logline: $log_line");
+    }
 
-    return ($dt, $date, $query_str, $client_ip);
+    return ($valid, $dt, $date, $query_str, $client_ip);
 }
 
 return 1;
