@@ -1,13 +1,7 @@
 package WRL;
 
 use Sys::Syslog;
-
-$debug = 0;
-
-sub set_debug
-{
-    ($WRL::debug) = @_;
-}
+use IPT;
 
 package Record;
 sub new
@@ -89,33 +83,28 @@ sub add_record
     ## querying a blocked query gets you blocked
     if ($this->{'blocked'}) {
 	if (!$record->{'client'}->{'blocked'}) {
-	    $record->{'client'}->block();
+	    $record->{'client'}->block("blocked for querying blocked query ($this->{'id'})");
 	}
     }
 }
     
 sub block
 {
-    my ($this) = @_;
-    my ($query, $hex_query, $ipt_cmd);
+    my ($this, $reason) = @_;
 
     return if ($this->{'blocked'});
 
-    #$hex_query = unpack('H*', $this->{'id'});
-    #$ipt_cmd = sprintf('iptables -A INPUT -p udp --dport 53 -m string --hex-string "|%s|" --algo bm -j DROP', $hex_query);
-
-    if ($WRL::debug) {
-	print "$ipt_cmd\n";
-    } else {
-	#system($ipt_cmd);
-	Sys::Syslog::syslog('warning', "blocked query %s (%s)", $this->{'id'}, $ipt_cmd);
-    }
+    
+    #IPT::block_query($main::iptables_block_chain, $this->{'id'}, $reason);
 
     for $query (@{$this->{'record_list'}}) {
-	$query->{'client'}->block();
+	if (defined $query->{'client'}) {
+	    $query->{'client'}->block("blocked for adding to blocked query ($this->{'id'})");
+	}
     }
 
     $this->{'blocked'} = 1;
+    $main::queries_block{$this->{'id'}} = 1;
 }
 
 package ClientWRL;
@@ -123,21 +112,15 @@ our @ISA = (WindowedRecordList);
 
 sub block
 {
-    my ($this) = @_;
+    my ($this, $reason) = @_;
     my ($ipt_cmd) = @_;
 
     return if ($this->{'blocked'});
 
-    $ipt_cmd = sprintf('iptables -A INPUT -p udp --dport 53 -s "%s" -j DROP', $this->{'id'});
-
-    if ($WRL::debug) {
-	print "$ipt_cmd\n";
-    } else {
-	system($ipt_cmd);
-	Sys::Syslog::syslog('warning', "blocked client %s (%s)", $this->{'id'}, $ipt_cmd);
-    }
+    IPT::block_host($this->{'id'}, $reason);
 
     $this->{'blocked'} = 1;
+    $main::clients_block{$this->{'id'}} = 1;
 }
 
 
