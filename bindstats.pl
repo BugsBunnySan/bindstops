@@ -6,10 +6,13 @@ use Fcntl;
 use Data::Dumper;
 use Sys::Syslog;
 use Date::Parse;
+use Data::Dumper;
+use POSIX;
 
 ## custom perl modules 
 use WRL; # implementation of query and client windowed record lists
 use BS; # utilities 
+use IPT; # iptables stuff
 
 # WRL::set_debug(1);
 
@@ -19,7 +22,7 @@ $threshold_query_window  = 10; # over this period of time => block
 $threshold_client_ps     =  5; # if the same client per second
 $threshold_client_window = 10; # over this period of time => block
 
-$log_check_sleepy_time =  5; # if no new log entries, sleep for this many seconds
+$log_check_sleepy_time =  1; # if no new log entries, sleep for this many seconds
 $print_count_interval  = 30; # every this many seconds update the html count page
 
 $query_ttl  = 3600;
@@ -36,8 +39,10 @@ $clients_block_db  = "/var/log/named/clients_block.db";
 
 $print_stats_file = "/var/www/blinkenlicht/stats/bind.html";
 
-
+## misc config
 $html_eol = "<br />\n";
+
+## Let's do it
 
 ($now, $today) = BS::now();
 
@@ -45,6 +50,28 @@ tie(%queries_per_day, 'NDBM_File', $queries_db, O_CREAT|O_RDWR, 0644)     or do_
 tie(%metadata, 'NDBM_File', $metadata_db, O_CREAT|O_RDWR, 0644)           or do_quit(-1, "metadata db $!\n", $now);
 tie(%queries_block, 'NDBM_File', $queries_block_db, O_CREAT|O_RDWR, 0644) or do_quit(-1, "queries block db $!\n", $now);
 tie(%clients_block, 'NDBM_File', $clients_block_db, O_CREAT|O_RDWR, 0644) or do_quit(-1, "clients block db $!\n", $now);
+
+## main loop control var
+$done = 0;
+
+## install signals
+sub dump_db
+{
+    syslog('info', "Recorded queries blocked:\n");
+    syslog('info', Dumper(\%queries_block));
+    syslog('info', "Recorded clients blocked:\n");
+    syslog('info', Dumper(\%clients_block));
+}
+$sigusr1_action = POSIX::SigAction->new(\&dump_db);
+POSIX::sigaction(SIGUSR1, $sigusr1_action);
+
+sub sig_quit
+{
+    $done = 1;
+    syslog('info', 'exiting on user signal');
+}
+$sighup_action = POSIX::SigAction->new(\&sig_quit);
+POSIX::sigaction(SIGHUP, $sighup_action);
 
 $day_queries = $queries_per_day{$today};
 
@@ -55,12 +82,19 @@ $cleanup_ts = $now;
 openlog("bindstats.pl", "nofatal", "local0");
 open($LOG, '<', $queries_log,) or do_quit(-1, "log $!\n", $now, $LOG);
 
-($query_records, $client_records) = init_records(\%queries_block, \%clients_block, $threshold_query_window, $threshold_client_window);
+syslog('info', 'Restarting');
+($query_records, $client_records) = init_blocks(\%queries_block, \%clients_block, $threshold_query_window, $threshold_client_window);
 
-while (1) {
+while (!$done) {
     $log_line = <$LOG>;
     if (!defined($log_line)) {
 	sleep $log_check_sleepy_time;
+	next;
+    }
+
+    ## take apart the log line
+    ($valid, $datetime, $date, $query_str, $client_ip) = BS::parse_log_line($log_line);
+    if (!$valid) {
 	next;
     }
 	
@@ -76,9 +110,6 @@ while (1) {
 	++$day_queries;
     }
     $queries_per_day{$today} = $day_queries;
-
-    ## take apart the log line
-    ($datetime, $date, $query_str, $client_ip) = BS::parse_log_line($log_line);
 
     ## create a new client_record and add it to the WRL
     $client_record = ClientRecord->new($datetime);
@@ -103,11 +134,13 @@ while (1) {
     $query_wrl->calc_rate($now);
     if ($query_wrl->{'rate'} >= $threshold_query_ps) {
 	$query_wrl->block();
+	$queries_block{$query_str} = 1;
     }
 
     $client_wrl->calc_rate($now);
     if ($client_wrl->{'rate'} >= $threshold_client_ps) {
 	$client_wrl->block();
+	$clients_block{$client_ip} = 1;
     }	
     
     if (($now - $cleanup_ts) >= $cleanup_interval) {
@@ -147,7 +180,7 @@ sub cleanup
     }
 }
 
-sub init_records
+sub init_blocks
 {
     my ($queries_block, $clients_block, $query_window, $client_window) = @_;
     my ($query, $client);
@@ -155,16 +188,18 @@ sub init_records
     my $qrs = {};
     my $crs = {};
 
+    IPT::init_iptables();
+
     while ($query_str = each %$queries_block) {
 	$query_record = QueryRecord->new($query_str, undef, 0);
 	$qrs->{$query_str} = QueryWRL->new($query_str, $query_record, $query_window);
-	$qrs->{$query_str}->{'blocked'} = 1;
+	$qrs->{$query_str}->block();
     }
     
     while ($client_ip = each %$clients_block) {
-	$client_record = ClientRecord->new($client_ip, 0);
+	$client_record = ClientRecord->new(0);
 	$crs->{$client_ip} = ClientWRL->new($client_ip, $client_record, $client_window);
-	$crs->{$client_ip}->{'blocked'} = 1;
+	$crs->{$client_ip}->block();
     }
 
     return ($qrs, $crs);
