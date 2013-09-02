@@ -29,3 +29,11 @@ Configuration
 -------------
 
 See CFG.pm
+
+Control
+-------
+
+Start the program from it's directory.
+
+Send signal SIGUSR1 to the process and it will dump out some statistics to syslog.
+Send signal SIGHUP to the process and it will shutdown cleanly
