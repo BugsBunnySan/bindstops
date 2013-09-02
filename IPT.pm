@@ -38,7 +38,7 @@ sub block_host
     my $ipt_cmd = sprintf('iptables -A %s -p udp --dport 53 -s "%s"', $CFG::iptables_block_chain, $host);
     
     if ($reason) {
-	$ipt_cmd .= sprintf('-m comment --comment "%s"', $reason);
+	#$ipt_cmd .= sprintf(' -m comment --comment "%s"', $reason);
     }
 
     $ipt_cmd .= ' -j DROP';
@@ -74,7 +74,7 @@ sub block_query
     my $ipt_cmd = sprintf('iptables -A %s -p udp --dport 53 -m string --hex-string "|%s|" --algo bm', $CFG::iptables_block_chain, $hex_query);
 
     if ($reason) {
-	$ipt_cmd .= sprintf('-m comment --comment "%s"', $reason);
+	#$ipt_cmd .= sprintf(' -m comment --comment "%s"', $reason);
     }
 
     $ipt_cmd .= ' -j DROP';
