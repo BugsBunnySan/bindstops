@@ -101,19 +101,20 @@ while ($loop_ctrl) {
     my $query_wrl = $query_records->{$query_str};
 
     ## calculate rates and (potentialy) block
-    $query_wrl->calc_rate($now);
-    if (($query_wrl->{'rate'} >= $CFG::threshold_query_ps) &&
-	(!$CFG::queries_block{$query_str})) {
-	$query_wrl->block();
-	$CFG::queries_block{$query_str} = 1;
+    if (!$CFG::queries_block{$query_str}) {
+	$query_wrl->calc_rate($now);
+	if ($query_wrl->{'rate'} >= $CFG::threshold_query_ps) {
+	    $query_wrl->block();
+	    $CFG::queries_block{$query_str} = 1;
+	}
     }
-
-    $client_wrl->calc_rate($now);
-    if (($client_wrl->{'rate'} >= $CFG::threshold_client_ps) &&
-	(!$CFG::clients_block{$client_ip})) {
-	$client_wrl->block();
-	$CFG::clients_block{$client_ip} = 1;
-    }	
+    if (!$CFG::clients_block{$client_ip}) {
+	$client_wrl->calc_rate($now);
+	if ($client_wrl->{'rate'} >= $CFG::threshold_client_ps) {
+	    $client_wrl->block();
+	    $CFG::clients_block{$client_ip} = 1;
+	}	
+    }
     
     if (($now - $cleanup_ts) >= $CFG::cleanup_interval) {
 	cleanup(\$query_records, $CFG::query_ttl, \$client_records, $CFG::client_ttl);
