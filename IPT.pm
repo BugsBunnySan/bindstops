@@ -1,9 +1,7 @@
 package IPT;
+use strict;
 
-## firewall config
-$iptables_block_chain = 'DNS_BLOCK'; # the iptables chain we're adding our filter rules to
-
-@default_rules = ('-p udp -m udp --dport 53 -m string --hex-string "|0000ff0001|" --algo bm --to 65535 -j DROP');
+use CFG;
 
 sub do_system
 {
@@ -13,12 +11,13 @@ sub do_system
 
 }
 
-sub init_iptables
+sub init_firewall
 {
-    do_system(sprintf('iptables -F %s', $IPT::iptables_block_chain));
+    do_system(sprintf('iptables -N %s', $CFG::iptables_block_chain));
+    do_system(sprintf('iptables -F %s', $CFG::iptables_block_chain));
 
-    for $rule (@IPT::default_rules) {
-	do_system(sprintf('iptables -A %s %s', $IPT::iptables_block_chain, $rule));
+    for my $rule (@IPT::default_rules) {
+	do_system(sprintf('iptables -A %s %s', $CFG::iptables_block_chain, $rule));
     }
 }
 
@@ -26,27 +25,52 @@ sub block_host
 {
     my ($host, $reason) = @_;
 
-    $ipt_cmd = sprintf('iptables -A %s -p udp --dport 53 -s "%s" -j DROP', $IPT::iptables_block_chain, $host);
+    my $ipt_cmd = sprintf('iptables -A %s -p udp --dport 53 -s "%s"', $CFG::iptables_block_chain, $host);
     
     if ($reason) {
-	#$ipt_cmd .= sprintf('-m comment --comment "%s"', $reason);
+	$ipt_cmd .= sprintf('-m comment --comment "%s"', $reason);
     }
+
+    $ipt_cmd .= ' -j DROP';
 
     do_system($ipt_cmd);
     Sys::Syslog::syslog('warning', "blocked client %s (%s)", $host, $ipt_cmd);
 }
 
+sub encode_name_part
+{
+    my ($name_part) = @_;
+
+    return sprintf('%02x%s', length($name_part), unpack('H*', $name_part));
+}
+
+sub encode_hex_query
+{
+    my ($query_str) = @_;
+
+    my ($query_host, @query_flags) = split(/\s+/, $query_str);
+    my (@name_parts) = split(/\./, $query_host);
+
+    my $hex_query = join('', map { encode_name_part($_) } (@name_parts, '')); # add the 0 byte root label as ''
+
+    return $hex_query;
+}
+
 sub block_query
 {
-    my ($query, $reason) = @_;
+    my ($query_str, $reason) = @_;
 
-    $hex_query = unpack('H*', $query);
-    $ipt_cmd = sprintf('iptables -A %s -p udp --dport 53 -m string --hex-string "|%s|" --algo bm -j DROP', $IPT::iptables_block_chain, $hex_query);
+    my $hex_query = encode_hex_query($query_str);
+    my $ipt_cmd = sprintf('iptables -A %s -p udp --dport 53 -m string --hex-string "|%s|" --algo bm', $CFG::iptables_block_chain, $hex_query);
 
     if ($reason) {
-	#$ipt_cmd .= sprintf('-m comment --comment "%s"', $reason);
+	$ipt_cmd .= sprintf('-m comment --comment "%s"', $reason);
     }
 
+    $ipt_cmd .= ' -j DROP';
+
     do_system($ipt_cmd);
-    Sys::Syslog::syslog('warning', "blocked query %s (%s)", $query, $ipt_cmd);
+    Sys::Syslog::syslog('warning', "blocked query %s (%s)", $query_str, $ipt_cmd);
 }
+
+1;
