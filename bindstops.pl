@@ -17,7 +17,6 @@ use strict;
 
 ## standrd perl modules
 use NDBM_File;
-use Data::Dumper;
 use Sys::Syslog;
 use Date::Parse;
 use Data::Dumper;
@@ -48,7 +47,9 @@ our $cleanup_ts = $now;
 openlog("bindstops.pl", "nofatal", "local0");
 syslog('info', 'Starting');
 
-print_count($CFG::print_stats_file, \%CFG::queries_per_day);
+if ($CFG::print_count_interval >= 0) {
+    print_count($CFG::print_stats_file, \%CFG::queries_per_day);
+}
 
 open(our $LOG, '<', $CFG::queries_log,) or do_quit(-1, "log $!\n", $now, $LOG);
 
@@ -119,7 +120,8 @@ while ($loop_ctrl) {
 	$cleanup_ts = $now;
     }
 
-    if (($now - $print_count_ts) >= $CFG::print_count_interval) {
+    if (($CFG::print_count_interval >= 0) && 
+	(($now - $print_count_ts) >= $CFG::print_count_interval)) {
 	print_count($CFG::print_stats_file, \%CFG::queries_per_day);
 	$print_count_ts = $now;
     }
