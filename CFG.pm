@@ -20,28 +20,28 @@ our $threshold_client_ps     =  5; # if the same client per second
 our $threshold_client_window = 10; # over this period of time => block
 
 our $log_check_sleepy_time =  1; # if no new log entries, sleep for this many seconds
-our $print_count_interval  = 30; # every this many seconds update the html count page
+our $print_count_interval  = 30; # every this many seconds update the html count page (set to -1 to disable the printing)
 
-our $query_ttl  = 3600;
-our $client_ttl = 3600;
-our $cleanup_interval = 1800;
-
-## files config
-our $queries_log = "/var/log/named/queries.log";
-
-our $queries_db  = "/var/log/named/queries.db";
-our $metadata_db = "/var/log/named/metadata.db";
-our $queries_block_db  = "/var/log/named/queries_block.db";
-our $clients_block_db  = "/var/log/named/clients_block.db";
-
-our $print_stats_file = "/var/www/blinkenlicht/stats/bind.html";
-
-## misc config
-our $html_eol = "<br />\n";
+our $query_ttl  = 3600;       # query WRLs last accessed more than this many seconds are forgotten
+our $client_ttl = 3600;       # client WRLs last accessed more than this many seconds are forgotten
+our $cleanup_interval = 1800; # every this many seconds the cleanup using the TTLs above is used
 
 ## firewall config
 # the iptables chain we're adding our filter rules to
 our $iptables_block_chain = 'DNS_BLOCK';
+
+## files config
+our $queries_log = "/var/log/named/queries.log"; # bind queries log, only read
+
+our $queries_db  = "/var/log/named/queries.db";              
+our $metadata_db = "/var/log/named/metadata.db";            # currently records the last seen timestamp
+our $queries_block_db  = "/var/log/named/queries_block.db"; # collects blocked queries
+our $clients_block_db  = "/var/log/named/clients_block.db"; # collects blocked clients
+
+our $print_stats_file = "/var/www/blinkenlicht/stats/bind.html"; # the html count page file
+
+## misc config
+our $html_eol = "<br />\n";
 
 # this blocks ANY type queries
 our @default_rules = ('-p udp -m udp --dport 53 -m string --hex-string "|0000ff0001|" --algo bm --to 65535 -j DROP');
