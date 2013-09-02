@@ -92,7 +92,7 @@ while ($loop_ctrl) {
     my $client_wrl = $client_records->{$client_ip};
 
     ## create a new query record, linked to the client_wrl, and add it to the WRL
-    my $query_record = QueryRecord->new($query_str, $client_wrl, $datetime);
+    my $query_record = QueryRecord->new($client_wrl, $datetime);
     if (defined($query_records->{$query_str})) {
 	$query_records->{$query_str}->add_record($query_record);
     } else {
@@ -188,7 +188,7 @@ sub init_blocks
     IPT::init_firewall();
 
     while (my $query_str = each %$queries_block) {
-	my $query_record = QueryRecord->new($query_str, undef, 0);
+	my $query_record = QueryRecord->new(undef, 0);
 	$qrs->{$query_str} = QueryWRL->new($query_str, $query_record, $query_window);
 	$qrs->{$query_str}->block();
     }
