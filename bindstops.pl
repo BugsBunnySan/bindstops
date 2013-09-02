@@ -31,7 +31,7 @@ our $day_queries = $CFG::queries_per_day{$today};
 our $print_count_ts = $now;
 our $cleanup_ts = $now;
 
-openlog("bindstats.pl", "nofatal", "local0");
+openlog("bindstops.pl", "nofatal", "local0");
 syslog('info', 'Starting');
 
 print_count($CFG::print_stats_file, \%CFG::queries_per_day);
