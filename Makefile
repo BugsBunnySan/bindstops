@@ -3,7 +3,7 @@ EDITOR=emacs
 TESTER=perl -MTest::Harness
 TFLAGS=-e '$$Test::Harness::verbose=1; runtests @ARGV;'
 
-MAIN=bindsops.pl
+MAIN=bindstops.pl
 MODULES=BS.pm IPT.pm WRL.pm
 TESTFILES=*.t
 
