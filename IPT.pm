@@ -13,12 +13,24 @@ use strict;
 
 use CFG;
 
+our $debug = 0;
+
+sub set_debug
+{
+    my ($debug_flag) = @_;
+
+    $IPT::debug = $debug_flag;
+}
+
 sub do_system
 {
     my ($cmd) = @_;
 
-    return system($cmd);
-
+    if ($IPT::debug) {
+	print ("$cmd\n");
+    } else {
+	return system($cmd);
+    }
 }
 
 sub init_firewall
