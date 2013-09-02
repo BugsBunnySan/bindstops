@@ -1,4 +1,5 @@
 package WRL;
+use strict;
 
 use Sys::Syslog;
 use IPT;
@@ -16,21 +17,20 @@ sub new
 package QueryRecord;
 ## records the client as well
 #  we'll be blocking clients participating in a query that's > threshold
-our @ISA = (Record);
+our @ISA = ('Record');
 sub new
 {
-    my ($cls, $query_str, $client, $ts) = @_;
+    my ($cls, $client, $ts) = @_;
 
-    my $this = {'query_str' => $query_str,
-		'client'    => $client,
-		'ts'        => $ts};
+    my $this = Record->new($ts);
+    $this->{'client'} = $client;
 
     return bless $this, $cls;
 }
 
 package ClientRecord;
 ## for now this is just a copy of Record
-our @ISA = (Record);
+our @ISA = ('Record');
 
 package WindowedRecordList;
 
@@ -71,7 +71,7 @@ sub calc_rate
 }
 
 package QueryWRL;
-our @ISA = (WindowedRecordList);
+our @ISA = ('WindowedRecordList');
 
 sub add_record
 {
@@ -94,10 +94,11 @@ sub block
 
     return if ($this->{'blocked'});
 
-    
+    ## note: queries aren't blocked as such right now, to lighten the load of the firewall
+    #        and to better log what clients are bothering us
     #IPT::block_query($main::iptables_block_chain, $this->{'id'}, $reason);
 
-    for $query (@{$this->{'record_list'}}) {
+    for my $query (@{$this->{'record_list'}}) {
 	if (defined $query->{'client'}) {
 	    $query->{'client'}->block("blocked for adding to blocked query ($this->{'id'})");
 	}
@@ -108,7 +109,7 @@ sub block
 }
 
 package ClientWRL;
-our @ISA = (WindowedRecordList);
+our @ISA = ('WindowedRecordList');
 
 sub block
 {
@@ -123,5 +124,4 @@ sub block
     $main::clients_block{$this->{'id'}} = 1;
 }
 
-
-return 1;
+1;
