@@ -26,7 +26,7 @@ sub init_firewall
     do_system(sprintf('iptables -N %s', $CFG::iptables_block_chain));
     do_system(sprintf('iptables -F %s', $CFG::iptables_block_chain));
 
-    for my $rule (@IPT::default_rules) {
+    for my $rule (@CFG::default_rules) {
 	do_system(sprintf('iptables -A %s %s', $CFG::iptables_block_chain, $rule));
     }
 }
