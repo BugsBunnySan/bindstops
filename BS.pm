@@ -37,4 +37,29 @@ sub parse_log_line
     return ($valid, $dt, $date, $query_str, $client_ip);
 }
 
+sub encode_query
+{
+    my ($query) = @_;
+    my (@parts, $pack_string, @pack_values, $length, $qname);
+
+    chomp($query);
+    $query =~ m/^([\w\.]+)\s.+$/;
+    $name = $1;
+
+    @parts = split(/\./, $name);
+
+    $pack_string = '';
+    foreach $part (@parts) {
+	$length = length($part);
+	$pack_string .= sprintf('C A%d ', $length);
+	push @pack_values, ($length, $part);
+    }
+    $pack_string .= 'C';
+    push @pack_values, 0;
+
+    $qname = pack($pack_string, @pack_values);
+
+    return $qname;
+}
+
 return 1;

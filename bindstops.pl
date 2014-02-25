@@ -53,8 +53,9 @@ if ($CFG::print_count_interval >= 0) {
 
 open(our $LOG, '<', $CFG::queries_log,) or do_quit(-1, "log $!\n", $now, $LOG);
 
-our ($query_records, $client_records) = init_blocks(\%CFG::queries_block, \%CFG::clients_block, $CFG::threshold_query_window, $CFG::threshold_client_window);
-
+our ($query_records, $client_records) = init_blocks(\%CFG::queries_block, \%CFG::clients_block,
+                                                    $CFG::clients_whitelist,
+                                                    $CFG::threshold_query_window, $CFG::threshold_client_window);
 while ($loop_ctrl) {
     my $log_line = <$LOG>;
     if (!defined($log_line)) { # => we're at EOF, wait a bit and try again
@@ -67,7 +68,21 @@ while ($loop_ctrl) {
     if (!$valid) {
 	next;
     }
-	
+
+    if (defined $CFG::clients_whitelist->{$client_ip}) {
+    	next;
+    }
+
+    my @query_string_parts = split('\.', $query_str);
+    my $subdomain_query_str;
+    my @query_strings = ($query_str);
+    if (@query_string_parts > 2) {
+	shift @query_string_parts;
+	$subdomain_query_str = join('.', @query_string_parts);
+	push @query_strings, $subdomain_query_str;
+    }
+    print "@query_strings\n";
+    	
     my $old_today = $today;
     ($now, $today) = BS::now();
 
@@ -92,20 +107,23 @@ while ($loop_ctrl) {
     my $client_wrl = $client_records->{$client_ip};
 
     ## create a new query record, linked to the client_wrl, and add it to the WRL
-    my $query_record = QueryRecord->new($client_wrl, $datetime);
-    if (defined($query_records->{$query_str})) {
-	$query_records->{$query_str}->add_record($query_record);
-    } else {
-	$query_records->{$query_str} = QueryWRL->new($query_str, $query_record, $CFG::threshold_query_window);
-    }
-    my $query_wrl = $query_records->{$query_str};
-
-    ## calculate rates and (potentialy) block
-    if (!$CFG::queries_block{$query_str}) {
-	$query_wrl->calc_rate($now);
-	if ($query_wrl->{'rate'} >= $CFG::threshold_query_ps) {
-	    $query_wrl->block();
-	    $CFG::queries_block{$query_str} = 1;
+    my $qs;
+    foreach $qs (@query_strings) {
+	my $query_record = QueryRecord->new($client_wrl, $datetime);
+	if (defined($query_records->{$qs})) {
+	    $query_records->{$qs}->add_record($query_record);
+	} else {
+	    $query_records->{$qs} = QueryWRL->new($qs, $query_record, $CFG::threshold_query_window);
+	}
+	my $query_wrl = $query_records->{$qs};
+	
+	## calculate rates and (potentialy) block
+	if (!$CFG::queries_block{$qs}) {
+	    $query_wrl->calc_rate($now);
+	    if ($query_wrl->{'rate'} >= $CFG::threshold_query_ps) {
+		$query_wrl->block();
+		$CFG::queries_block{$qs} = 1;
+	    }
 	}
     }
     if (!$CFG::clients_block{$client_ip}) {
@@ -179,7 +197,7 @@ sub init_signals
 
 sub init_blocks
 {
-    my ($queries_block, $clients_block, $query_window, $client_window) = @_;
+    my ($queries_block, $clients_block, $clients_whitelist, $query_window, $client_window) = @_;
     my ($query, $client);
 
     my $qrs = {};
@@ -192,8 +210,11 @@ sub init_blocks
 	$qrs->{$query_str} = QueryWRL->new($query_str, $query_record, $query_window);
 	$qrs->{$query_str}->block();
     }
-    
+
     while (my $client_ip = each %$clients_block) {
+    	if (defined $clients_whitelist->{$client_ip}) {
+	    next;
+	}
 	my $client_record = ClientRecord->new(0);
 	$crs->{$client_ip} = ClientWRL->new($client_ip, $client_record, $client_window);
 	$crs->{$client_ip}->block();
@@ -224,6 +245,8 @@ sub print_count
 sub do_quit
 { 
     my ($ec, $reason, $now, $LOG) = @_;
+
+    syslog('info', "quitting: $reason\n");
 
     close($LOG) if ($LOG);
 

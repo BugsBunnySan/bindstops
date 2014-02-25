@@ -102,17 +102,17 @@ sub block
 {
     my ($this, $reason) = @_;
 
-    return if ($this->{'blocked'});
-
-    ## note: queries aren't blocked as such right now, to lighten the load of the firewall
-    #        and to better log what clients are bothering us
-    #IPT::block_query($main::iptables_block_chain, $this->{'id'}, $reason);
-
     for my $query (@{$this->{'record_list'}}) {
 	if (defined $query->{'client'}) {
 	    $query->{'client'}->block("blocked for adding to blocked query ($this->{'id'})");
 	}
     }
+
+    return if ($this->{'blocked'});
+
+    ## note: queries aren't blocked as such right now, to lighten the load of the firewall
+    #        and to better log what clients are bothering us
+    IPT::block_query($this->{'id'}, $reason);
 
     $this->{'blocked'} = 1;
     $main::queries_block{$this->{'id'}} = 1;

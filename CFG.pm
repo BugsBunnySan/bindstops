@@ -14,17 +14,22 @@ use strict;
 use Fcntl;
 
 ## threshold / time config
-our $threshold_query_ps      =  5; # if this many same query per second
-our $threshold_query_window  = 10; # over this period of time => block
-our $threshold_client_ps     =  5; # if the same client per second
+our $threshold_query_ps      =  3; # if this many same query per second
+our $threshold_query_window  = 20; # over this period of time => block
+our $threshold_client_ps     = 20; # if the same client per second
 our $threshold_client_window = 10; # over this period of time => block
 
 our $log_check_sleepy_time =  1; # if no new log entries, sleep for this many seconds
 our $print_count_interval  = 30; # every this many seconds update the html count page (set to -1 to disable the printing)
 
-our $query_ttl  = 3600;       # query WRLs last accessed more than this many seconds are forgotten
-our $client_ttl = 3600;       # client WRLs last accessed more than this many seconds are forgotten
+our $query_ttl  = 3600;       # query WRLs last accessed more than this many seconds ago are forgotten
+our $client_ttl = 3600;       # client WRLs last accessed more than this many seconds agoare forgotten
 our $cleanup_interval = 1800; # every this many seconds the cleanup using the TTLs above is used
+
+## whitelist - never block these hosts
+# it doesn't matter what they're mapped to, just so we can look them up via hashed ip
+our $clients_whitelist = {'127.0.0.1'       => 1,
+                          '109.73.52.34'    => 1};
 
 ## firewall config
 # the iptables chain we're adding our filter rules to
@@ -35,19 +40,23 @@ our $queries_log = "/var/log/named/queries.log"; # bind queries log, only read
 
 our $queries_db  = "/var/log/named/queries.db";              
 our $metadata_db = "/var/log/named/metadata.db";            # currently records the last seen timestamp
-our $queries_block_db  = "/var/log/named/queries_block.db"; # collects blocked queries
-our $clients_block_db  = "/var/log/named/clients_block.db"; # collects blocked clients
+our $queries_block_db  = "/var/log/named/queries_block.db"; # collects blocked queries (these are never forgotten)
+our $clients_block_db  = "/var/log/named/clients_block.db"; # collects blocked clients ( -""- )
 
 our $print_stats_file = "/var/www/blinkenlicht/stats/bind.html"; # the html count page file
+
+## firewall rules added to $iptables_block_chain on init (the cahin is flushed on start)
+# this blocks ANY type queries
+our @default_rules = ('-p udp -m udp --dport 53 -m string --hex-string "|0000ff0001|" --algo bm --to 65535 -j DROP');
+
+## this regex should match bind's query log
+# 21-Aug-2013 03:40:20.579 queries: info: client 184.72.178.83#766: query: bfhmm.com IN TXT +E (109.73.52.34)
+our $query_regex = '^(\d\d-...-\d\d\d\d) (\d\d:\d\d:\d\d.\d\d\d) .* client ([0-9\.]+)#\d+: query: ([^\(]+) \(';
 
 ## misc config
 our $html_eol = "<br />\n";
 
-# this blocks ANY type queries
-our @default_rules = ('-p udp -m udp --dport 53 -m string --hex-string "|0000ff0001|" --algo bm --to 65535 -j DROP');
-
-# 21-Aug-2013 03:40:20.579 queries: info: client 184.72.178.83#766: query: bfhmm.com IN TXT +E (109.73.52.34)
-our $query_regex = '^(\d\d-...-\d\d\d\d) (\d\d:\d\d:\d\d.\d\d\d) .* client ([0-9\.]+)#\d+: query: ([^\(]+) \(';
+## end of user defined configs ####################################
 
 our $months = { 0 => "Jan",  1 => "Feb",  2 => "Mar",  3 => "Apr",
 		4 => "May",  5 => "Jun",  6 => "Jul",  7 => "Aug",
