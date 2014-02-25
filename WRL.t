@@ -8,7 +8,10 @@ require_ok('BS');
 use_ok('WRL');
 require_ok('WRL');
 
-WRL::set_debug(1);
+use_ok('IPT');
+require_ok('IPT');
+
+IPT::set_debug(1);
 
 my ($now, $today) = BS::now();
 my $query_str = 'tar.blinkenlicht.de';
@@ -43,13 +46,13 @@ isa_ok($cwrl1, 'ClientWRL');
 ok($cwrl1->{'rate'} == 0, "ClientWRL initial rate is 0");
 ok($cwrl1->{'blocked'} == 0, "ClientWRL initialiy unblocked");
 
-my $query_record1 = QueryRecord->new($query_str, $cwrl1, $now);
+my $query_record1 = QueryRecord->new($cwrl1, $now);
 isa_ok($query_record1, 'QueryRecord');
 ok($query_record1->{'ts'} == $now, "Query record has correct 'ts' field");
 ok($query_record1->{'client'}->{'id'} eq $cwrl1->{'id'}, "Client added correctly to the query record");
 
 my $cwrl2 = ClientWRL->new($client2_ip, $client_record, $window);
-my $query_record2 = QueryRecord->new($query_str, $cwrl2, $now);
+my $query_record2 = QueryRecord->new($cwrl2, $now);
 
 my $qwrl = QueryWRL->new('test', $query_record1, $window);
 $qwrl->add_record($query_record1);
